@@ -3,7 +3,6 @@ import uuid
 
 from django.conf import settings
 from django.core.cache import cache
-from django.core.mail import send_mail
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -12,6 +11,7 @@ from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .email_utils import send_service_mail
 from .serializers import EmailOnlySerializer  # email 필드만 받는 Serializer
 
 User = get_user_model()
@@ -52,19 +52,19 @@ class SendEmailCodeView(APIView):
         ttl = getattr(settings, "EMAIL_VERIFICATION_CODE_TTL", 120)      # 기본 120초
         cooldown = getattr(settings, "EMAIL_VERIFICATION_COOLDOWN", 60)  # 기본 60초
 
-        # 캐시에 코드/쿨다운 저장
-        cache.set(_code_key(email), code, ttl)
-        cache.set(_cooldown_key(email), True, cooldown)
-        cache.delete(_verified_key(email))  # 이전 검증 상태 초기화
-
         # 메일 발송
         subject = "[ScholarMate] 이메일 인증번호"
         minutes = max(1, ttl // 60)
         message = f"인증번호: {code}\n유효시간: {minutes}분"
         try:
-            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
+            send_service_mail(subject, message, [email])
         except Exception as e:
             return Response({"detail": f"메일 전송 실패: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 메일 발송 성공 후에만 캐시에 코드/쿨다운 저장
+        cache.set(_code_key(email), code, ttl)
+        cache.set(_cooldown_key(email), True, cooldown)
+        cache.delete(_verified_key(email))  # 이전 검증 상태 초기화
 
         return Response({"detail": "인증번호를 전송했습니다.", "ttl": ttl}, status=status.HTTP_200_OK)
 
@@ -142,7 +142,7 @@ class UsernameLookupView(APIView):
 
         subject = "[ScholarMate] 아이디 안내"
         try:
-            send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
+            send_service_mail(subject, body, [email])
         except Exception:
             # 메일 오류여도 동일 응답(Enumeration 방지)
             cache.set(_lookup_cooldown_key(email), True, cooldown_ttl)
@@ -224,17 +224,17 @@ class SendPwResetCodeView(APIView):
         ttl = getattr(settings, "PASSWORD_RESET_CODE_TTL", 600)      # 기본 10분
         cooldown = getattr(settings, "PASSWORD_RESET_COOLDOWN", 60)  # 기본 60초
 
-        cache.set(_pw_code_key(email, username), code, ttl)
-        cache.set(_pw_cooldown_key(email, username), True, cooldown)
-        cache.delete(_pw_session_key(email, username))  # 이전 세션 무효화
-
         subject = "[ScholarMate] 비밀번호 재설정 인증코드"
         minutes = max(1, ttl // 60)
         message = f"비밀번호 재설정을 위한 인증코드: {code}\n유효시간: {minutes}분"
         try:
-            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
+            send_service_mail(subject, message, [email])
         except Exception as e:
             return Response({"detail": f"메일 전송 실패: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cache.set(_pw_code_key(email, username), code, ttl)
+        cache.set(_pw_cooldown_key(email, username), True, cooldown)
+        cache.delete(_pw_session_key(email, username))  # 이전 세션 무효화
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -312,4 +312,3 @@ class ResetPasswordWithCodeView(APIView):
         cache.delete(_pw_session_key(email, username))
 
         return Response(status=status.HTTP_204_NO_CONTENT)
-
