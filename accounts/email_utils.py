@@ -1,5 +1,9 @@
+import smtplib
+import socket
+import ssl
+
 from django.conf import settings
-from django.core.mail import EmailMessage, get_connection, send_mail
+from django.core.mail import EmailMessage, send_mail
 
 
 class EmailDeliveryError(Exception):
@@ -55,6 +59,86 @@ def _smtp_attempts():
     return attempts
 
 
+class IPv4SMTP(smtplib.SMTP):
+    def _get_socket(self, host, port, timeout):
+        if self.debuglevel > 0:
+            self._print_debug("connect: to", (host, port), self.source_address)
+
+        last_error = None
+        for family, socktype, proto, _, address in socket.getaddrinfo(
+            host, port, socket.AF_INET, socket.SOCK_STREAM
+        ):
+            sock = None
+            try:
+                sock = socket.socket(family, socktype, proto)
+                if timeout is not None:
+                    sock.settimeout(timeout)
+                if self.source_address:
+                    sock.bind(self.source_address)
+                sock.connect(address)
+                return sock
+            except OSError as exc:
+                last_error = exc
+                if sock is not None:
+                    sock.close()
+
+        if last_error:
+            raise last_error
+        raise OSError(f"No IPv4 address found for {host}")
+
+
+class IPv4SMTPSSL(smtplib.SMTP_SSL):
+    def _get_socket(self, host, port, timeout):
+        raw_socket = IPv4SMTP._get_socket(self, host, port, timeout)
+        return self.context.wrap_socket(raw_socket, server_hostname=self._host)
+
+
+def _send_smtp_mail(attempt, subject, message, recipient_list):
+    timeout = settings.EMAIL_TIMEOUT
+    context = ssl.create_default_context()
+    client = None
+    try:
+        if attempt["use_ssl"]:
+            client = IPv4SMTPSSL(
+                attempt["host"],
+                attempt["port"],
+                timeout=timeout,
+                context=context,
+            )
+        else:
+            client = IPv4SMTP(
+                attempt["host"],
+                attempt["port"],
+                timeout=timeout,
+            )
+            if attempt["use_tls"]:
+                client.ehlo()
+                client.starttls(context=context)
+                client.ehlo()
+
+        if attempt["username"] and settings.EMAIL_HOST_PASSWORD:
+            client.login(attempt["username"], settings.EMAIL_HOST_PASSWORD)
+
+        email = EmailMessage(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            recipient_list,
+        )
+        client.send_message(
+            email.message(),
+            from_addr=settings.DEFAULT_FROM_EMAIL,
+            to_addrs=recipient_list,
+        )
+        return len(recipient_list)
+    finally:
+        if client is not None:
+            try:
+                client.quit()
+            except Exception:
+                client.close()
+
+
 def send_service_mail(subject, message, recipient_list):
     if not settings.EMAIL_BACKEND.endswith("smtp.EmailBackend"):
         return send_mail(
@@ -74,25 +158,7 @@ def send_service_mail(subject, message, recipient_list):
         )
         print(f"EMAIL attempt {label}")
         try:
-            connection = get_connection(
-                backend=settings.EMAIL_BACKEND,
-                host=attempt["host"],
-                port=attempt["port"],
-                username=attempt["username"],
-                password=settings.EMAIL_HOST_PASSWORD,
-                use_ssl=attempt["use_ssl"],
-                use_tls=attempt["use_tls"],
-                timeout=settings.EMAIL_TIMEOUT,
-                fail_silently=False,
-            )
-            email = EmailMessage(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                recipient_list,
-                connection=connection,
-            )
-            sent_count = email.send()
+            sent_count = _send_smtp_mail(attempt, subject, message, recipient_list)
             print(f"EMAIL sent {label}")
             return sent_count
         except Exception as exc:
