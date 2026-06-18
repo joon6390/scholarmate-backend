@@ -95,7 +95,7 @@ EMAIL_BACKEND = os.getenv(
 )
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", True)
-EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "5"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
 
 _CONTACT_ADMIN_EMAILS = [
