@@ -93,8 +93,9 @@ EMAIL_BACKEND = os.getenv(
     if EMAIL_HOST_PASSWORD
     else "django.core.mail.backends.filebased.EmailBackend",
 )
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "False") == "True"
-EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "True") == "True"
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", False)
+EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", True)
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
 
 _CONTACT_ADMIN_EMAILS = [
