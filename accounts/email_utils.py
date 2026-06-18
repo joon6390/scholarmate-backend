@@ -36,6 +36,8 @@ def _smtp_attempts():
     if host.lower() == "smtp.naver.com":
         usernames = _naver_usernames(settings.EMAIL_HOST_USER)
         candidates = [(port, use_ssl, use_tls), (465, True, False), (587, False, True)]
+    elif host.lower() == "smtp.gmail.com":
+        candidates = [(port, use_ssl, use_tls), (587, False, True), (465, True, False)]
     else:
         candidates = [(port, use_ssl, use_tls)]
 
