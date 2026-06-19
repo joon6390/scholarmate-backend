@@ -2,6 +2,7 @@ import smtplib
 import socket
 import ssl
 
+import requests
 from django.conf import settings
 from django.core.mail import EmailMessage, send_mail
 
@@ -141,7 +142,37 @@ def _send_smtp_mail(attempt, subject, message, recipient_list):
                 client.close()
 
 
+def _send_resend_mail(subject, message, recipient_list):
+    if not settings.RESEND_API_KEY:
+        raise EmailDeliveryError("RESEND_API_KEY is not configured")
+
+    response = requests.post(
+        settings.RESEND_API_URL,
+        headers={
+            "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "from": settings.RESEND_FROM_EMAIL,
+            "to": recipient_list,
+            "subject": subject,
+            "text": message,
+        },
+        timeout=settings.EMAIL_TIMEOUT,
+    )
+    if response.status_code >= 400:
+        raise EmailDeliveryError(
+            f"Resend API error {response.status_code}: {response.text}"
+        )
+    print(f"EMAIL sent resend to={len(recipient_list)}")
+    return len(recipient_list)
+
+
 def send_service_mail(subject, message, recipient_list):
+    if settings.EMAIL_PROVIDER == "resend" or settings.RESEND_API_KEY:
+        print(f"EMAIL attempt resend to={len(recipient_list)}")
+        return _send_resend_mail(subject, message, recipient_list)
+
     if not settings.EMAIL_BACKEND.endswith("smtp.EmailBackend"):
         return send_mail(
             subject,

@@ -123,6 +123,9 @@ Railway MySQL 플러그인의 기본 변수명을 그대로 사용할 수 있습
 | `EMAIL_HOST_USER` | SMTP 사용자 |
 | `EMAIL_HOST_PASSWORD` | SMTP 비밀번호 |
 | `DEFAULT_FROM_EMAIL` | 발신 이메일 |
+| `EMAIL_PROVIDER` | `smtp` 또는 `resend` |
+| `RESEND_API_KEY` | Resend HTTPS API 발송용 API key |
+| `RESEND_FROM_EMAIL` | Resend 발신자, 예: `ScholarMate <onboarding@resend.dev>` |
 | `CONTACT_ADMIN_EMAILS` | 문의 수신 이메일, 쉼표 구분 |
 | `DJANGO_SECURE_HSTS_SECONDS` | 예: `31536000`, HTTPS 전용 운영 시 설정 |
 | `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` | 모든 하위 도메인이 HTTPS일 때만 `True` |
