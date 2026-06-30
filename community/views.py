@@ -146,6 +146,7 @@ class ConversationViewSet(mixins.ListModelMixin,
                 unread_count=Count(
                     "messages",
                     filter=Q(messages__is_read=False) & ~Q(messages__sender_id=user.id),
+                    distinct=True,
                 ),
                 participant_count=Count("participants", distinct=True),   # ✅ 남은 인원
             )
